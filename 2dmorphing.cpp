@@ -172,14 +172,14 @@ void delaunayTriangulation(const std::vector<Point2f>& points1, const std::vecto
 	std::vector<Point2f>& pointsMorph, double alpha, std::vector<correspondens>& delaunayTri, Size imgSize)
 {
 	//计算变形图像的关键点并打印
-	morpKeypoints(points1, points2, pointsMorph, alpha); 
-	for (int i = 0; i < pointsMorph.size(); ++i){
+	morpKeypoints(points1, points2, pointsMorph, alpha);
+	for (int i = 0; i < pointsMorph.size(); ++i) {
 		cout << pointsMorph[i].x << " " << pointsMorph[i].y;
 	}
 	cout << endl;
 
 	Rect rect(0, 0, imgSize.width, imgSize.height); //创建一个矩形，用于 Delaunay 三角剖分
-	
+
 	cv::Subdiv2D subdiv(rect);
 	for (std::vector<Point2f>::iterator it = pointsMorph.begin(); it != pointsMorph.end(); it++) //将关键点插入到 subdiv 中
 		subdiv.insert(*it);
@@ -218,12 +218,12 @@ void delaunayTriangulation(const std::vector<Point2f>& points1, const std::vecto
 
 
 /*
-// apply affine transform on one triangle.
+// 在一个三角形中应用仿射变换
 */
 void applyAffineTransform(Mat& warpImage, Mat& src, std::vector<Point2f>& srcTri, std::vector<Point2f>& dstTri)
 {
-	Mat warpMat = getAffineTransform(srcTri, dstTri);
-
+	Mat warpMat = getAffineTransform(srcTri, dstTri); //计算仿射变换矩阵
+	// 将仿射变换应用于输入图像
 	warpAffine(src, warpImage, warpMat, warpImage.size(), cv::INTER_LINEAR, BORDER_REFLECT_101);
 }
 
@@ -253,20 +253,21 @@ void morphTriangle(Mat& img1, Mat& img2, Mat& img, std::vector<Point2f>& t1, std
 	}
 
 	Mat mask = Mat::zeros(r.height, r.width, CV_32FC3);
-	fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0), 16, 0);
+	fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0), 16, 0); // 在mask上填充三角形
 
 	Mat img1Rect, img2Rect;
-	img1(r1).copyTo(img1Rect);
+	img1(r1).copyTo(img1Rect); // 将输入图像的三角形区域复制到img1Rect
 	img2(r2).copyTo(img2Rect);
 
-	Mat warpImage1 = Mat::zeros(r.height, r.width, img1Rect.type());
+	Mat warpImage1 = Mat::zeros(r.height, r.width, img1Rect.type()); // 创建一个空的图像，用于存储变形后的图像
 	Mat warpImage2 = Mat::zeros(r.height, r.width, img2Rect.type());
 
-	applyAffineTransform(warpImage1, img1Rect, t1Rect, tRect);
+	applyAffineTransform(warpImage1, img1Rect, t1Rect, tRect); // 将仿射变换应用于输入图像
 	applyAffineTransform(warpImage2, img2Rect, t2Rect, tRect);
 
-	Mat imgRect = (1.0 - alpha) * warpImage1 + alpha * warpImage2;
+	Mat imgRect = (1.0 - alpha) * warpImage1 + alpha * warpImage2; // 将两个变形图像混合在一起，以获得最终的变形图像
 
+	// 将变形图像复制到输出图像中
 	multiply(imgRect, mask, imgRect);
 	multiply(img(r), Scalar(1.0, 1.0, 1.0) - mask, img(r));
 	img(r) = img(r) + imgRect;
@@ -307,6 +308,8 @@ void morp(Mat& img1, Mat& img2, Mat& imgMorph, double alpha, const std::vector<P
 		t.push_back(points[x]);
 		t.push_back(points[y]);
 		t.push_back(points[z]);
+
+		// 对morph图像的三角形进行morph
 		morphTriangle(img1, img2, imgMorph, t1, t2, t, alpha);
 	}
 }
@@ -335,7 +338,9 @@ int main(int argc, char** argv)
 	//利用opencv读取图片，并进行检查
 	Mat img1CV = imread(argv[1]);
 	Mat img2CV = imread(argv[2]);
-	if (img1CV.data && img2CV.data) {
+	Mat img1CV_display = imread(argv[1]);
+	Mat img2CV_display = imread(argv[2]);
+	if (img1CV.data && img2CV.data && img1CV_display.data && img2CV_display.data) {
 		cout << "图片已经通过opencv被读取" << endl;
 	}
 	else {
@@ -355,22 +360,22 @@ int main(int argc, char** argv)
 	addKeypoints(landmarks1, img1CV.size());
 	addKeypoints(landmarks2, img2CV.size());
 
-	//分别在两个原始图像中加入关键点
-	for (int i = 0; i < landmarks1.size(); ++i){
-		circle(img1CV, landmarks1[i], 2, CV_RGB(255, 0, 0), -2);
+	//分别在两个display图像中加入关键点
+	for (int i = 0; i < landmarks1.size(); ++i) {
+		circle(img1CV_display, landmarks1[i], 2, CV_RGB(255, 0, 0), -2);
 	}
-	for (int i = 0; i < landmarks2.size(); ++i){
-		circle(img2CV, landmarks2[i], 2, CV_RGB(255, 0, 0), -2);
+	for (int i = 0; i < landmarks2.size(); ++i) {
+		circle(img2CV_display, landmarks2[i], 2, CV_RGB(255, 0, 0), -2);
 	}
 
 	//显示两个原始图像
 	std::vector<Mat> imgs;
-	imgs.push_back(img1CV);
-	imgs.push_back(img2CV);
+	imgs.push_back(img1CV_display);
+	imgs.push_back(img2CV_display);
 	inshowmany("The origin picture", imgs);
 	cv::waitKey(0);
 
-	//--------------- 步骤三3：渐变 ----------------------------------------------
+	//--------------- 步骤三：渐变 ----------------------------------------------
 	std::vector<Mat> resultImage;
 	resultImage.push_back(img1CV);
 	cout << "add the first image" << endl;
@@ -379,13 +384,13 @@ int main(int argc, char** argv)
 		Mat imgMorph = Mat::zeros(img1CV.size(), CV_32FC3); //创建一个空的morph图像
 		std::vector<Point2f> pointsMorph;
 
-		std::vector<correspondens> delaunayTri; 
+		std::vector<correspondens> delaunayTri;
 		//对morph图像进行Delaunay三角剖分，建立对应关系
-		delaunayTriangulation(landmarks1, landmarks2, pointsMorph, alpha, delaunayTri, img1CV.size()); 
+		delaunayTriangulation(landmarks1, landmarks2, pointsMorph, alpha, delaunayTri, img1CV.size());
 		cout << "done " << alpha << " delaunayTriangulation..." << delaunayTri.size() << endl;
 
 		//对图像进行morph
-		morp(img1CV, img2CV, imgMorph, alpha, landmarks1, landmarks2, delaunayTri); 
+		morp(img1CV, img2CV, imgMorph, alpha, landmarks1, landmarks2, delaunayTri);
 		cout << "done " << alpha << " morph.........." << endl;
 
 		resultImage.push_back(imgMorph); //将morph图像加入到结果图像中
@@ -395,11 +400,10 @@ int main(int argc, char** argv)
 	cout << "resultImage number is" << resultImage.size() << endl;
 
 
-	//----------- step 4. write into vedio --------------------------------
+	//----------- 步骤四：输出图像和视频 --------------------------------
+	// 保存图片
 	for (int i = 0; i < resultImage.size(); ++i)
 	{
-
-		//output_src<<resultImage[i];
 		string st = argv[1];
 		char t[20];
 		sprintf(t, "%d", i);
@@ -419,10 +423,11 @@ int main(int argc, char** argv)
 		pic.push_back(imread(filename));
 	}
 
+	// 保存视频
 	string vedioName = argv[1];
-	vedioName = vedioName + argv[2];
-	vedioName = vedioName + ".avi";
-	VideoWriter output_src(vedioName, CAP_OPENCV_MJPEG, 5, resultImage[0].size());
+	vedioName = "." + vedioName + argv[2];
+	vedioName = vedioName + ".mp4";
+	VideoWriter output_src(vedioName, 0x7634706d, 5, resultImage[0].size());
 	for (int i = 0; i < pic.size(); ++i)
 	{
 
