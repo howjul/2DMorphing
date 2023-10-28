@@ -133,13 +133,16 @@ void inshowmany(const std::string& window_name, const std::vector<Mat>& images)
 		Mat imgROI = DispImage(Rect(m, n, (int)((double)images[i].cols / scale), (int)((double)images[i].rows / scale)));
 		resize(images[i], imgROI, Size((int)((double)images[i].cols / scale), (int)((double)images[i].rows / scale)));
 	}
+
 	// 显示大图像  
 	imshow(window_name, DispImage);
+
+	return;
 }
 
 
 /*
-// calculate the keypoints on the morph image.
+// 在计算morph图像上关键点位置
 */
 
 void morpKeypoints(const std::vector<Point2f>& points1, const std::vector<Point2f>& points2, std::vector<Point2f>& pointsMorph, double alpha)
@@ -147,18 +150,20 @@ void morpKeypoints(const std::vector<Point2f>& points1, const std::vector<Point2
 	for (int i = 0; i < points1.size(); i++)
 	{
 		float x, y;
+		// 对于每个关键点，计算变形图像中的关键点位置
 		x = (1 - alpha) * points1[i].x + alpha * points2[i].x;
 		y = (1 - alpha) * points1[i].y + alpha * points2[i].y;
 
 		pointsMorph.push_back(Point2f(x, y));
-
 	}
 }
 
 
 /*
-//perform Delaunay Triangulation on the keypoints of the morph image.
+// 对变形图像的关键点执行 Delaunay 三角剖分。
 */
+
+//定义了用于存储三角形和它们的索引之间对应关系的结构。
 struct correspondens {
 	std::vector<int> index;
 };
@@ -166,61 +171,49 @@ struct correspondens {
 void delaunayTriangulation(const std::vector<Point2f>& points1, const std::vector<Point2f>& points2,
 	std::vector<Point2f>& pointsMorph, double alpha, std::vector<correspondens>& delaunayTri, Size imgSize)
 {
-	//cout<<"begin delaunayTriangulation......"<<endl;
-	morpKeypoints(points1, points2, pointsMorph, alpha);
-	//cout<<"done morpKeypoints, pointsMorph has points "<<pointsMorph.size()<<endl;
-	Rect rect(0, 0, imgSize.width, imgSize.height);
-
-	for (int i = 0; i < pointsMorph.size(); ++i)
-	{
-		cout << pointsMorph[i].x << " " << pointsMorph[i].y << endl;
+	//计算变形图像的关键点并打印
+	morpKeypoints(points1, points2, pointsMorph, alpha); 
+	for (int i = 0; i < pointsMorph.size(); ++i){
+		cout << pointsMorph[i].x << " " << pointsMorph[i].y;
 	}
+	cout << endl;
 
-
-
+	Rect rect(0, 0, imgSize.width, imgSize.height); //创建一个矩形，用于 Delaunay 三角剖分
+	
 	cv::Subdiv2D subdiv(rect);
-	for (std::vector<Point2f>::iterator it = pointsMorph.begin(); it != pointsMorph.end(); it++)
+	for (std::vector<Point2f>::iterator it = pointsMorph.begin(); it != pointsMorph.end(); it++) //将关键点插入到 subdiv 中
 		subdiv.insert(*it);
-	//cout<<"done subdiv add......"<<endl;
 	std::vector<Vec6f> triangleList;
-	subdiv.getTriangleList(triangleList);
-	//cout<<"traingleList number is "<<triangleList.size()<<endl;
+	subdiv.getTriangleList(triangleList); //获取矩形区域的三角形列表
 
-
-
-	//std::vector<Point2f> pt;
-	//correspondens ind;
+	//将三角形列表转换为三角形索引列表
 	for (size_t i = 0; i < triangleList.size(); ++i)
 	{
-
+		//获取三角形的三个顶点的坐标
 		std::vector<Point2f> pt;
 		correspondens ind;
 		Vec6f t = triangleList[i];
 		pt.push_back(Point2f(t[0], t[1]));
 		pt.push_back(Point2f(t[2], t[3]));
 		pt.push_back(Point2f(t[4], t[5]));
-		//cout<<"pt.size() is "<<pt.size()<<endl;
 
+		//检查三角形是否在矩形内
 		if (rect.contains(pt[0]) && rect.contains(pt[1]) && rect.contains(pt[2]))
 		{
-			//cout<<t[0]<<" "<<t[1]<<" "<<t[2]<<" "<<t[3]<<" "<<t[4]<<" "<<t[5]<<endl;
 			int count = 0;
 			for (int j = 0; j < 3; ++j)
+				//对于三角形的每个顶点，检查它是否接近 pointsMorph 中的任何点。如果是，记录匹配点的索引在 ind.index 中。
 				for (size_t k = 0; k < pointsMorph.size(); k++)
 					if (abs(pt[j].x - pointsMorph[k].x) < 1.0 && abs(pt[j].y - pointsMorph[k].y) < 1.0)
 					{
 						ind.index.push_back(k);
 						count++;
 					}
+			// 如果三角形的所有三个顶点都在 pointsMorph 中有对应的点，那么这意味着该三角形在变形区域内，代码将 ind 结构添加到 delaunayTri 向量中。
 			if (count == 3)
-				//cout<<"index is "<<ind.index[0]<<" "<<ind.index[1]<<" "<<ind.index[2]<<endl;
 				delaunayTri.push_back(ind);
 		}
-		//pt.resize(0);
-		//cout<<"delaunayTri.size is "<<delaunayTri.size()<<endl;
 	}
-
-
 }
 
 
@@ -236,15 +229,18 @@ void applyAffineTransform(Mat& warpImage, Mat& src, std::vector<Point2f>& srcTri
 
 
 /*
-//the core function of face morph.
-//morph the two input image to the morph image by transacting the set of triangles in the two input image to the morph image.
+// face morphing的核心函数。
+// 通过将两个输入图像中的三角形集转换到变形图像，将两个输入图像变形为变形图像。
 */
+
 void morphTriangle(Mat& img1, Mat& img2, Mat& img, std::vector<Point2f>& t1, std::vector<Point2f>& t2, std::vector<Point2f>& t, double alpha)
 {
+	// 在输入图像上计算三角形的边界框
 	Rect r = cv::boundingRect(t);
 	Rect r1 = cv::boundingRect(t1);
 	Rect r2 = cv::boundingRect(t2);
 
+	// 计算三角形的相对位置
 	std::vector<Point2f> t1Rect, t2Rect, tRect;
 	std::vector<Point> tRectInt;
 	for (int i = 0; i < 3; ++i)
@@ -277,23 +273,20 @@ void morphTriangle(Mat& img1, Mat& img2, Mat& img, std::vector<Point2f>& t1, std
 }
 
 
-
-
 /*
-//morp the two input images into the morph image.
-//first get the keypoints correspondents of the set of  triangles, then call the core function.
+// 将两个输入图像morph为morph图像。
+// 首先获取三角形集合的关键点对应关系，然后调用核心函数。
 */
 void morp(Mat& img1, Mat& img2, Mat& imgMorph, double alpha, const std::vector<Point2f>& points1, const std::vector<Point2f>& points2, const std::vector<correspondens>& triangle)
 {
-	img1.convertTo(img1, CV_32F);
+	// 将两个输入图像morph为morph图像。
+	img1.convertTo(img1, CV_32F);// 将图像转换为浮点数格式
 	img2.convertTo(img2, CV_32F);
 
-
-
 	std::vector<Point2f> points;
-	morpKeypoints(points1, points2, points, alpha);
+	morpKeypoints(points1, points2, points, alpha);// 输入为两个图像的关键点，输出为morph图像的关键点
 
-
+	// 对morph图像进行Delaunay三角剖分，建立对应关系
 	int x, y, z;
 	int count = 0;
 	for (int i = 0; i < triangle.size(); ++i)
@@ -315,17 +308,8 @@ void morp(Mat& img1, Mat& img2, Mat& imgMorph, double alpha, const std::vector<P
 		t.push_back(points[y]);
 		t.push_back(points[z]);
 		morphTriangle(img1, img2, imgMorph, t1, t2, t, alpha);
-		//count++;
-		//string shun = "hunhe";
-		//if (count % 10 == 0 || count == triangle.size() - 1 || count == triangle.size())
-		//	imwrite(shun+to_string(count)+".jpg", imgMorph);
 	}
-
 }
-
-
-
-
 
 
 int main(int argc, char** argv)
@@ -371,45 +355,40 @@ int main(int argc, char** argv)
 	addKeypoints(landmarks1, img1CV.size());
 	addKeypoints(landmarks2, img2CV.size());
 
-	//在图像上显示关键点
-	for (int i = 0; i < landmarks1.size(); ++i)
-	{
+	//分别在两个原始图像中加入关键点
+	for (int i = 0; i < landmarks1.size(); ++i){
 		circle(img1CV, landmarks1[i], 2, CV_RGB(255, 0, 0), -2);
 	}
-
-	imshow("landmark1", img1CV);
-	cv::waitKey(0);
-
-	for (int i = 0; i < landmarks2.size(); ++i)
-	{
+	for (int i = 0; i < landmarks2.size(); ++i){
 		circle(img2CV, landmarks2[i], 2, CV_RGB(255, 0, 0), -2);
 	}
-	imshow("landmark2", img2CV);
-	cv::waitKey(0);
 
+	//显示两个原始图像
 	std::vector<Mat> imgs;
 	imgs.push_back(img1CV);
 	imgs.push_back(img2CV);
-	inshowmany("landmark1 and landmark2", imgs);
+	inshowmany("The origin picture", imgs);
 	cv::waitKey(0);
 
-	//--------------- step 3. face morp ----------------------------------------------
+	//--------------- 步骤三3：渐变 ----------------------------------------------
 	std::vector<Mat> resultImage;
 	resultImage.push_back(img1CV);
 	cout << "add the first image" << endl;
 	for (double alpha = 0.1; alpha < 1; alpha += 0.1)
 	{
-		Mat imgMorph = Mat::zeros(img1CV.size(), CV_32FC3);
+		Mat imgMorph = Mat::zeros(img1CV.size(), CV_32FC3); //创建一个空的morph图像
 		std::vector<Point2f> pointsMorph;
 
-		std::vector<correspondens> delaunayTri;
-		delaunayTriangulation(landmarks1, landmarks2, pointsMorph, alpha, delaunayTri, img1CV.size());
+		std::vector<correspondens> delaunayTri; 
+		//对morph图像进行Delaunay三角剖分，建立对应关系
+		delaunayTriangulation(landmarks1, landmarks2, pointsMorph, alpha, delaunayTri, img1CV.size()); 
 		cout << "done " << alpha << " delaunayTriangulation..." << delaunayTri.size() << endl;
 
-		morp(img1CV, img2CV, imgMorph, alpha, landmarks1, landmarks2, delaunayTri);
+		//对图像进行morph
+		morp(img1CV, img2CV, imgMorph, alpha, landmarks1, landmarks2, delaunayTri); 
 		cout << "done " << alpha << " morph.........." << endl;
 
-		resultImage.push_back(imgMorph);
+		resultImage.push_back(imgMorph); //将morph图像加入到结果图像中
 		cout << "add the" << alpha * 10 + 1 << "image" << endl;
 	}
 	resultImage.push_back(img2CV);
@@ -417,9 +396,6 @@ int main(int argc, char** argv)
 
 
 	//----------- step 4. write into vedio --------------------------------
-
-
-
 	for (int i = 0; i < resultImage.size(); ++i)
 	{
 
