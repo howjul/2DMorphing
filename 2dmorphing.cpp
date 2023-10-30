@@ -38,6 +38,7 @@ int faceDetectionandCut(dlib::array2d<dlib::rgb_pixel>& img, std::string img_nam
 	dlib::matrix<dlib::bgr_pixel> tmp;
 	dlib::assign_image(tmp, img);
 	cv::Mat cvimg = dlib::toMat(tmp).clone();
+	cv::Mat cvimg_display = dlib::toMat(tmp).clone();
 
 	if (dets.size() == 1) {
 		cout << "是否需要对图片 " << img_name << " 进行裁切: 0.否 1.是   ";
@@ -100,21 +101,89 @@ int faceDetectionandCut(dlib::array2d<dlib::rgb_pixel>& img, std::string img_nam
 		return cut;
 	}
 
+	// 如果检测到多个人脸，则在图像上绘制矩形框，用于标记面部，并让用户选择一个面部进行裁切
+	cut = 1;
+
 	// 初始化一个用于标记的计数器
 	int counter = 1;
 
 	// 遍历检测到的面部，绘制矩形并添加标号
 	for (const dlib::rectangle& det : dets) {
 		// 绘制一个矩形框围绕面部
-		cv::rectangle(cvimg, cv::Point(det.left(), det.top()), cv::Point(det.right(), det.bottom()), cv::Scalar(0, 255, 0), 2);
+		cv::rectangle(cvimg_display, cv::Point(det.left(), det.top()), cv::Point(det.right(), det.bottom()), cv::Scalar(0, 255, 0), 2);
 
 		// 在矩形框的左上角添加标号
-		cv::putText(cvimg, std::to_string(counter), cv::Point(det.left(), det.top() - 10), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+		cv::putText(cvimg_display, std::to_string(counter), cv::Point(det.left(), det.top() - 10), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
 
 		// 增加计数器
 		counter++;
 	}
 
+	imshow("当前图像", cvimg_display);
+	cv::waitKey(0);
+
+	cout << "选择一张脸进行裁切：(输入数字) ";
+	int chosenface;
+	cin >> chosenface;
+
+	// 检查用户输入是否合法
+	while (chosenface < 1 || chosenface > dets.size()) {
+		cout << "输入不合法，请重新输入： ";
+		cin >> chosenface;
+	}
+
+	// 获取用户选择的面部
+	const dlib::rectangle& selectface = dets[chosenface - 1];
+
+	full_object_detection shape = sp(img, selectface);//用形状检测器来预测人脸的面部特征点
+
+	float left_max = shape.part(0).x();
+	float right_max = shape.part(0).x();
+	float top_max = shape.part(0).y();
+	float bottom_max = shape.part(0).y();
+	//遍历面部特征点，提取每个点的xy坐标，找出最边界的点
+
+	for (int i = 1; i < shape.num_parts(); ++i)
+	{
+		float x = shape.part(i).x();
+		float y = shape.part(i).y();
+		left_max = std::min(left_max, x);
+		right_max = std::max(right_max, x);
+		top_max = std::min(top_max, y);
+		bottom_max = std::max(bottom_max, y);
+	}
+
+	cout << left_max << " " << right_max << " " << top_max << " " << bottom_max << endl;
+	float face_width = right_max - left_max;
+	float face_height = bottom_max - top_max;
+	cut_width = face_width * 2;
+	cut_height = face_height * 2;
+
+	//计算裁切区域
+	int centerX = (selectface.left() + selectface.right()) / 2;
+	int centerY = (selectface.top() + selectface.bottom()) / 2;
+
+	int halfwidth = cut_width / 2;
+	int halfheight = cut_height / 2;
+
+	int head_left = std::max(0, centerX - halfwidth);
+	int head_right = std::min((int)img.nc(), centerX + halfwidth);
+	int head_top = std::max(0, centerY - halfheight);
+	int head_bottom = std::min((int)img.nr(), centerY + halfheight);
+
+	//裁切并调整区域
+	cout << head_left << " " << head_top << endl;
+	cv::Rect headRegion(head_left, head_top, head_right - head_left, head_bottom - head_top);
+	cv::Mat headROI = cvimg(headRegion);
+
+	//调整图像大小为标准大小
+	cv::resize(headROI, headROI, cv::Size(300, 320));
+
+	//保存裁切后的图像
+	std::string new_img_name = img_name + ".cut.jpg";
+	cv::imwrite(new_img_name, headROI);
+
+	cout << "裁切后的图片已保存为 " << new_img_name << endl;
 
 	return cut;
 }
