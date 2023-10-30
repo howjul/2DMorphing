@@ -4,17 +4,122 @@
 #include <dlib/gui_widgets.h>
 #include <dlib/image_io.h>
 #include <dlib/opencv/cv_image_abstract.h>
+#include <dlib/opencv.h>
+
 using namespace dlib;
 
+#include <opencv2/opencv.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 using namespace cv;
 
 #include <iostream>
 #include <vector>
+#include <string>
 using namespace std;
 
 // ----------------------------------------------------------------------------------------
+
+/*
+// 在输入图像上使用dlib的检测面部，如果检测到多个人脸，则进行裁切
+*/
+
+int faceDetectionandCut(dlib::array2d<dlib::rgb_pixel>& img, std::string img_name, shape_predictor sp) {
+	int cut = 0; //用于标记是否进行了裁切
+
+	//定义裁切尺寸
+	int cut_width = 150;
+	int cut_height = 150;
+
+	dlib::frontal_face_detector detector = get_frontal_face_detector(); //使用dlib的面部检测器
+	std::vector<dlib::rectangle> dets = detector(img); //使用面部检测器检测图像中的面部
+	cout << "被检测到的面部个数为：" << dets.size() << endl;
+
+	dlib::matrix<dlib::bgr_pixel> tmp;
+	dlib::assign_image(tmp, img);
+	cv::Mat cvimg = dlib::toMat(tmp).clone();
+
+	if (dets.size() == 1) {
+		cout << "是否需要对图片 " << img_name << " 进行裁切: 0.否 1.是   ";
+		cin >> cut;
+		if (cut == 0) return cut;
+
+		full_object_detection shape = sp(img, dets[0]);//用形状检测器来预测人脸的面部特征点
+
+		float left_max = shape.part(0).x();
+		float right_max = shape.part(0).x();
+		float top_max = shape.part(0).y();
+		float bottom_max = shape.part(0).y();
+		//遍历面部特征点，提取每个点的xy坐标，找出最边界的点
+
+		for (int i = 1; i < shape.num_parts(); ++i)
+		{
+			float x = shape.part(i).x();
+			float y = shape.part(i).y();
+			left_max = std::min(left_max, x);
+			right_max = std::max(right_max, x);
+			top_max = std::min(top_max, y);
+			bottom_max = std::max(bottom_max, y);
+		}
+
+		cout << left_max << " " << right_max << " " << top_max << " " << bottom_max << endl;
+		float face_width = right_max - left_max;
+		float face_height = bottom_max - top_max;
+		cut_width = face_width * 2;
+		cut_height = face_height * 2;
+
+		//否则进行裁切
+		const dlib::rectangle& selectface = dets[0];
+
+		//计算裁切区域
+		int centerX = (selectface.left() + selectface.right()) / 2;
+		int centerY = (selectface.top() + selectface.bottom()) / 2;
+
+		int halfwidth = cut_width / 2;
+		int halfheight = cut_height / 2;
+
+		int head_left = std::max(0, centerX - halfwidth);
+		int head_right = std::min((int)img.nc(), centerX + halfwidth);
+		int head_top = std::max(0, centerY - halfheight);
+		int head_bottom = std::min((int)img.nr(), centerY + halfheight);
+
+		//裁切并调整区域
+		cout << head_left << " " << head_top << endl;
+		cv::Rect headRegion(head_left, head_top, head_right - head_left, head_bottom - head_top);
+		cv::Mat headROI = cvimg(headRegion);
+
+		//调整图像大小为标准大小
+		cv::resize(headROI, headROI, cv::Size(300, 320));
+
+		//保存裁切后的图像
+		std::string new_img_name = img_name + ".cut.jpg";
+		cv::imwrite(new_img_name, headROI);
+
+		cout << "裁切后的图片已保存为 " << new_img_name << endl;
+
+		return cut;
+	}
+
+	// 初始化一个用于标记的计数器
+	int counter = 1;
+
+	// 遍历检测到的面部，绘制矩形并添加标号
+	for (const dlib::rectangle& det : dets) {
+		// 绘制一个矩形框围绕面部
+		cv::rectangle(cvimg, cv::Point(det.left(), det.top()), cv::Point(det.right(), det.bottom()), cv::Scalar(0, 255, 0), 2);
+
+		// 在矩形框的左上角添加标号
+		cv::putText(cvimg, std::to_string(counter), cv::Point(det.left(), det.top() - 10), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+
+		// 增加计数器
+		counter++;
+	}
+
+
+	return cut;
+}
+
+
 
 /*
 // 在输入图像上使用dlib的面部关键点检测器检测68个面部关键点。
@@ -23,10 +128,7 @@ using namespace std;
 void faceLandmarkDetection(dlib::array2d<unsigned char>& img, shape_predictor sp, std::vector<Point2f>& landmark)
 {
 	dlib::frontal_face_detector detector = get_frontal_face_detector(); //使用dlib的面部检测器
-	//dlib::pyramid_up(img); //将图像放大，以便面部检测器能够检测到更多的面部细节。
 	std::vector<dlib::rectangle> dets = detector(img); //使用面部检测器检测图像中的面部
-	cout << "被检测到的面部个数为：" << dets.size() << endl;
-
 	full_object_detection shape = sp(img, dets[0]);//用形状检测器来预测第一个检测到的人脸的面部特征点
 
 	//遍历面部特征点，提取每个点的xy坐标，这些坐标以Point2f的形式存储在landmark中
@@ -324,22 +426,41 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	//-------------- 步骤1：加载两个输入图像 --------------------------------------------       
+	//-------------- 步骤0：图像预处理 --------------------------------------------  
+	cout << "-------------- 步骤0：图像预处理 --------------------------------------------" << endl;
 	//定义dlib的面部关键点检测器
 	shape_predictor sp;
 	deserialize("shape_predictor_68_face_landmarks.dat") >> sp; //加载面部关键点检测器，这里使用了已经训练好的模型
 
 	//用dlib读取图片
+	dlib::array2d<dlib::rgb_pixel> img1_rgb, img2_rgb;
+	dlib::load_image(img1_rgb, argv[1]);
+	dlib::load_image(img2_rgb, argv[2]);
+
+	//检测人脸个数并进行裁切
+	int cut1 = faceDetectionandCut(img1_rgb, argv[1], sp);
+	int cut2 = faceDetectionandCut(img2_rgb, argv[2], sp);
+
+	//-------------- 步骤1：加载两个输入图像 --------------------------------------------
+	cout << "-------------- 步骤1：加载两个输入图像 --------------------------------------------" << endl;
+	string new_pic1_name = argv[1];
+	new_pic1_name += ".cut.jpg";
+	string new_pic2_name = argv[2];
+	new_pic2_name += ".cut.jpg";
+	string pic1_file_name = (cut1 == 0) ? argv[1] : new_pic1_name;
+	string pic2_file_name = (cut1 == 0) ? argv[2] : new_pic2_name;
+
+	//用dlib读取图片
 	dlib::array2d<unsigned char> img1, img2;
-	dlib::load_image(img1, argv[1]);
-	dlib::load_image(img2, argv[2]);
+	dlib::load_image(img1, pic1_file_name);
+	dlib::load_image(img2, pic2_file_name);
 	std::vector<Point2f> landmarks1, landmarks2;
 
 	//利用opencv读取图片，并进行检查
-	Mat img1CV = imread(argv[1]);
-	Mat img2CV = imread(argv[2]);
-	Mat img1CV_display = imread(argv[1]);
-	Mat img2CV_display = imread(argv[2]);
+	Mat img1CV = imread(pic1_file_name);
+	Mat img2CV = imread(pic2_file_name);
+	Mat img1CV_display = imread(pic1_file_name);
+	Mat img2CV_display = imread(pic2_file_name);
 	if (img1CV.data && img2CV.data && img1CV_display.data && img2CV_display.data) {
 		cout << "图片已经通过opencv被读取" << endl;
 	}
@@ -350,6 +471,7 @@ int main(int argc, char** argv)
 
 
 	//----------------- 步骤2：检测面部关键点 ---------------------------------------------
+	cout << "----------------- 步骤2：检测面部关键点 ---------------------------------------------" << endl;
 	//通过sp模型来检测img的面部关键点，并保存到landmarks中
 	faceLandmarkDetection(img1, sp, landmarks1);
 	faceLandmarkDetection(img2, sp, landmarks2);
@@ -376,6 +498,7 @@ int main(int argc, char** argv)
 	cv::waitKey(0);
 
 	//--------------- 步骤三：渐变 ----------------------------------------------
+	cout << "--------------- 步骤三：渐变 ----------------------------------------------" << endl;
 	std::vector<Mat> resultImage;
 	resultImage.push_back(img1CV);
 	cout << "add the first image" << endl;
@@ -401,10 +524,11 @@ int main(int argc, char** argv)
 
 
 	//----------- 步骤四：输出图像和视频 --------------------------------
+	cout << "----------- 步骤四：输出图像和视频 --------------------------------" << endl;
 	// 保存图片
 	for (int i = 0; i < resultImage.size(); ++i)
 	{
-		string st = argv[1];
+		string st = pic1_file_name;
 		char t[20];
 		sprintf(t, "%d", i);
 		st = st + t;
@@ -415,7 +539,7 @@ int main(int argc, char** argv)
 
 	for (int i = 0; i < resultImage.size(); ++i)
 	{
-		string filename = argv[1];
+		string filename = pic1_file_name;
 		char t[20];
 		sprintf(t, "%d", i);
 		filename = filename + t;
@@ -424,13 +548,12 @@ int main(int argc, char** argv)
 	}
 
 	// 保存视频
-	string vedioName = argv[1];
-	vedioName = "." + vedioName + argv[2];
+	string vedioName = pic1_file_name;
+	vedioName = "." + vedioName + pic2_file_name;
 	vedioName = vedioName + ".mp4";
 	VideoWriter output_src(vedioName, 0x7634706d, 5, resultImage[0].size());
 	for (int i = 0; i < pic.size(); ++i)
 	{
-
 		output_src << pic[i];
 	}
 	cout << "vedio wrighted....." << endl;
