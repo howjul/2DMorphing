@@ -606,6 +606,7 @@ int main(int argc, char** argv)
 	}
 	std::vector<Mat> pic;
 
+	// 读取图片到pic中
 	for (int i = 0; i < resultImage.size(); ++i)
 	{
 		string filename = pic1_file_name;
@@ -613,19 +614,19 @@ int main(int argc, char** argv)
 		sprintf(t, "%d", i);
 		filename = filename + t;
 		filename = filename + ".jpg";
-		pic.push_back(imread(filename));
+		pic.push_back(imread(filename)); //读取图片
 	}
 
 	// 保存视频
 	string vedioName = pic1_file_name;
 	vedioName = "." + vedioName + pic2_file_name;
 	vedioName = vedioName + ".mp4";
-	VideoWriter output_src(vedioName, 0x7634706d, 5, resultImage[0].size());
+	VideoWriter output_src(vedioName, 0x7634706d, 5, resultImage[0].size());//创建视频
 	for (int i = 0; i < pic.size(); ++i)
 	{
-		output_src << pic[i];
+		output_src << pic[i];//将图片写入视频
 	}
-	cout << "vedio wrighted....." << endl;
+	cout << "vedio completed!" << endl;
 
 
 	return 0;
