@@ -67,7 +67,7 @@ int faceDetectionandCut(dlib::array2d<dlib::rgb_pixel>& img, std::string img_nam
 		float face_width = right_max - left_max;
 		float face_height = bottom_max - top_max;
 		cut_width = face_width * 2;
-		cut_height = face_height * 2;
+		cut_height = face_height * 2.5;
 
 		//否则进行裁切
 		const dlib::rectangle& selectface = dets[0];
@@ -90,7 +90,7 @@ int faceDetectionandCut(dlib::array2d<dlib::rgb_pixel>& img, std::string img_nam
 		cv::Mat headROI = cvimg(headRegion);
 
 		//调整图像大小为标准大小
-		cv::resize(headROI, headROI, cv::Size(300, 320));
+		cv::resize(headROI, headROI, cv::Size(300, 380));
 
 		//保存裁切后的图像
 		std::string new_img_name = img_name + ".cut.jpg";
@@ -157,7 +157,7 @@ int faceDetectionandCut(dlib::array2d<dlib::rgb_pixel>& img, std::string img_nam
 	float face_width = right_max - left_max;
 	float face_height = bottom_max - top_max;
 	cut_width = face_width * 2;
-	cut_height = face_height * 2;
+	cut_height = face_height * 2.5;
 
 	//计算裁切区域
 	int centerX = (selectface.left() + selectface.right()) / 2;
@@ -177,7 +177,7 @@ int faceDetectionandCut(dlib::array2d<dlib::rgb_pixel>& img, std::string img_nam
 	cv::Mat headROI = cvimg(headRegion);
 
 	//调整图像大小为标准大小
-	cv::resize(headROI, headROI, cv::Size(300, 320));
+	cv::resize(headROI, headROI, cv::Size(300, 380));
 
 	//保存裁切后的图像
 	std::string new_img_name = img_name + ".cut.jpg";
@@ -342,12 +342,8 @@ struct correspondens {
 void delaunayTriangulation(const std::vector<Point2f>& points1, const std::vector<Point2f>& points2,
 	std::vector<Point2f>& pointsMorph, double alpha, std::vector<correspondens>& delaunayTri, Size imgSize)
 {
-	//计算变形图像的关键点并打印
+	//计算变形图像的关键点
 	morpKeypoints(points1, points2, pointsMorph, alpha);
-	for (int i = 0; i < pointsMorph.size(); ++i) {
-		cout << pointsMorph[i].x << " " << pointsMorph[i].y;
-	}
-	cout << endl;
 
 	Rect rect(0, 0, imgSize.width, imgSize.height); //创建一个矩形，用于 Delaunay 三角剖分
 
@@ -517,7 +513,7 @@ int main(int argc, char** argv)
 	string new_pic2_name = argv[2];
 	new_pic2_name += ".cut.jpg";
 	string pic1_file_name = (cut1 == 0) ? argv[1] : new_pic1_name;
-	string pic2_file_name = (cut1 == 0) ? argv[2] : new_pic2_name;
+	string pic2_file_name = (cut2 == 0) ? argv[2] : new_pic2_name;
 
 	//用dlib读取图片
 	dlib::array2d<unsigned char> img1, img2;
@@ -579,11 +575,11 @@ int main(int argc, char** argv)
 		std::vector<correspondens> delaunayTri;
 		//对morph图像进行Delaunay三角剖分，建立对应关系
 		delaunayTriangulation(landmarks1, landmarks2, pointsMorph, alpha, delaunayTri, img1CV.size());
-		cout << "done " << alpha << " delaunayTriangulation..." << delaunayTri.size() << endl;
+		cout << "\tdone " << alpha << " delaunayTriangulation..." << endl;
 
 		//对图像进行morph
 		morp(img1CV, img2CV, imgMorph, alpha, landmarks1, landmarks2, delaunayTri);
-		cout << "done " << alpha << " morph.........." << endl;
+		cout << "\tdone " << alpha << " morph.........." << endl;
 
 		resultImage.push_back(imgMorph); //将morph图像加入到结果图像中
 		cout << "add the" << alpha * 10 + 1 << "image" << endl;
@@ -606,7 +602,6 @@ int main(int argc, char** argv)
 	}
 	std::vector<Mat> pic;
 
-	// 读取图片到pic中
 	for (int i = 0; i < resultImage.size(); ++i)
 	{
 		string filename = pic1_file_name;
@@ -614,17 +609,17 @@ int main(int argc, char** argv)
 		sprintf(t, "%d", i);
 		filename = filename + t;
 		filename = filename + ".jpg";
-		pic.push_back(imread(filename)); //读取图片
+		pic.push_back(imread(filename));
 	}
 
 	// 保存视频
 	string vedioName = pic1_file_name;
 	vedioName = "." + vedioName + pic2_file_name;
 	vedioName = vedioName + ".mp4";
-	VideoWriter output_src(vedioName, 0x7634706d, 5, resultImage[0].size());//创建视频
+	VideoWriter output_src(vedioName, 0x7634706d, 5, resultImage[0].size());
 	for (int i = 0; i < pic.size(); ++i)
 	{
-		output_src << pic[i];//将图片写入视频
+		output_src << pic[i];
 	}
 	cout << "vedio completed!" << endl;
 
