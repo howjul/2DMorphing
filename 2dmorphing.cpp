@@ -482,14 +482,13 @@ void morp(Mat& img1, Mat& img2, Mat& imgMorph, double alpha, const std::vector<P
 }
 
 
-int main(int argc, char** argv)
+int main()
 {
-	//检查参数个数是否正确
-	if (argc != 3)
-	{
-		cout << "参数个数错误！" << endl;
-		return 0;
-	}
+	string pic1, pic2;
+	cout << "请键入原始图片路径：";
+	cin >> pic1;
+	cout << "请键入目标图片路径：";
+	cin >> pic2;
 
 	//-------------- 步骤0：图像预处理 --------------------------------------------  
 	cout << "-------------- 步骤0：图像预处理 --------------------------------------------" << endl;
@@ -499,21 +498,21 @@ int main(int argc, char** argv)
 
 	//用dlib读取图片
 	dlib::array2d<dlib::rgb_pixel> img1_rgb, img2_rgb;
-	dlib::load_image(img1_rgb, argv[1]);
-	dlib::load_image(img2_rgb, argv[2]);
+	dlib::load_image(img1_rgb, pic1);
+	dlib::load_image(img2_rgb, pic2);
 
 	//检测人脸个数并进行裁切
-	int cut1 = faceDetectionandCut(img1_rgb, argv[1], sp);
-	int cut2 = faceDetectionandCut(img2_rgb, argv[2], sp);
+	int cut1 = faceDetectionandCut(img1_rgb, pic1, sp);
+	int cut2 = faceDetectionandCut(img2_rgb, pic2, sp);
 
 	//-------------- 步骤1：加载两个输入图像 --------------------------------------------
 	cout << "-------------- 步骤1：加载两个输入图像 --------------------------------------------" << endl;
-	string new_pic1_name = argv[1];
+	string new_pic1_name = pic1;
 	new_pic1_name += ".cut.jpg";
-	string new_pic2_name = argv[2];
+	string new_pic2_name = pic2;
 	new_pic2_name += ".cut.jpg";
-	string pic1_file_name = (cut1 == 0) ? argv[1] : new_pic1_name;
-	string pic2_file_name = (cut2 == 0) ? argv[2] : new_pic2_name;
+	string pic1_file_name = (cut1 == 0) ? pic1 : new_pic1_name;
+	string pic2_file_name = (cut2 == 0) ? pic2 : new_pic2_name;
 
 	//用dlib读取图片
 	dlib::array2d<unsigned char> img1, img2;
